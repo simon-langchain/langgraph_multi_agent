@@ -76,8 +76,11 @@ python main.py
 ### 4. Run the API Server
 
 ```bash
-# Start server
-python api/server.py
+# Start server (run as module from project root)
+python -m api.server
+
+# Or with uvicorn directly
+uvicorn api.server:app --host 0.0.0.0 --port 8000
 
 # In another terminal, run the client examples
 python examples/api_client_example.py
@@ -208,7 +211,11 @@ result3 = graph.invoke(
 ### Start the Server
 
 ```bash
-python api/server.py
+# Run as module from project root
+python -m api.server
+
+# Or with uvicorn
+uvicorn api.server:app --host 0.0.0.0 --port 8000
 ```
 
 API docs available at: http://localhost:8000/docs

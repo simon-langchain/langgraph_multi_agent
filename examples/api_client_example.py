@@ -168,7 +168,7 @@ def demo_new_vs_existing_thread():
 
 if __name__ == "__main__":
     print("\nStarting API Client Examples...")
-    print("Make sure the API server is running: python api/server.py\n")
+    print("Make sure the API server is running: python -m api.server\n")
 
     try:
         # Check if server is running
@@ -187,8 +187,6 @@ if __name__ == "__main__":
     except requests.exceptions.ConnectionError:
         print("❌ Error: Cannot connect to API server")
         print("\nPlease start the server first:")
-        print("  python api/server.py")
-        print("\nOr in another terminal:")
         print("  cd langgraph_multi_agent")
         print("  python -m api.server")
     except Exception as e:
