@@ -7,7 +7,14 @@ IMPORTANT NOTES:
 3. Thread ID should be passed in config during invocation, NOT in the state
 """
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.checkpoint.mysql import MySQLSaver
+
+# MySQL checkpointer is optional - only import if installed
+try:
+    from langgraph.checkpoint.mysql import MySQLSaver
+    MYSQL_AVAILABLE = True
+except ImportError:
+    MYSQL_AVAILABLE = False
+    MySQLSaver = None
 
 
 def get_memory_saver():
@@ -36,7 +43,16 @@ def get_mysql_saver(connection_string: str = None):
         graph = workflow.compile(checkpointer=checkpointer)
 
     IMPORTANT: You MUST pass this checkpointer to compile() for it to work.
+
+    Raises:
+        ImportError: If langgraph-checkpoint-mysql is not installed
     """
+    if not MYSQL_AVAILABLE:
+        raise ImportError(
+            "MySQL checkpointer is not available. Install it with:\n"
+            "  pip install langgraph-checkpoint-mysql pymysql"
+        )
+
     if not connection_string:
         # Default for testing
         connection_string = "mysql://root:password@localhost:3306/langgraph_db"
