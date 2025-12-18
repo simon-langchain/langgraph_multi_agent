@@ -19,3 +19,6 @@ requests>=2.32.0
 
 # Utilities
 python-dotenv>=1.0.0
+
+# LangGraph Studio (for langgraph dev)
+langgraph-cli>=0.1.0

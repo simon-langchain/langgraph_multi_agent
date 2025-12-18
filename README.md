@@ -35,6 +35,9 @@ langgraph_multi_agent/
 │       ├── __init__.py
 │       ├── state.py
 │       └── agent.py
+├── graphs/                   # LangGraph Studio entry point
+│   ├── __init__.py
+│   └── multi_agent_system.py # Unified graph with all agents
 ├── api/
 │   └── server.py             # FastAPI server for remote graph invocation
 ├── utils/
@@ -42,7 +45,9 @@ langgraph_multi_agent/
 ├── examples/
 │   ├── mysql_example.py      # MySQL checkpointer examples
 │   └── api_client_example.py # API client examples
+├── langgraph.json            # LangGraph Studio configuration
 ├── main.py                   # Main entry point
+├── test_checkpointer.py      # Automated tests
 └── README.md
 ```
 
@@ -54,10 +59,13 @@ langgraph_multi_agent/
 cd langgraph_multi_agent
 
 # Install dependencies
-pip install langgraph langchain-openai fastapi uvicorn requests
+pip install -r requirements.txt
+
+# Or install manually:
+pip install langgraph langchain-openai fastapi uvicorn requests langgraph-cli
 
 # For MySQL support (optional)
-pip install langgraph-checkpoint-mysql
+pip install langgraph-checkpoint-mysql pymysql
 ```
 
 ### 2. Set Environment Variables
@@ -85,6 +93,30 @@ uvicorn api.server:app --host 0.0.0.0 --port 8000
 # In another terminal, run the client examples
 python examples/api_client_example.py
 ```
+
+### 5. Run with LangGraph Studio (Visual Development)
+
+```bash
+# Install LangGraph CLI
+pip install langgraph-cli
+
+# Start LangGraph Studio
+langgraph dev
+
+# Open your browser to http://localhost:8123
+# You'll see all three agents available:
+# - business_agent
+# - database_agent
+# - supervisor
+```
+
+**LangGraph Studio Features**:
+- 🎨 Visual graph representation
+- 💬 Interactive chat interface with agents
+- 🔍 Step-by-step execution debugging
+- 📊 State inspection at each node
+- 🔄 Thread management and conversation history
+- ⏱️ Time-travel debugging (replay conversations)
 
 ## 🔑 Critical Concepts
 
@@ -206,6 +238,130 @@ result3 = graph.invoke(
 )
 ```
 
+## 🎨 LangGraph Studio
+
+LangGraph Studio provides a visual interface for developing, debugging, and testing your agents. It's the easiest way to interact with your graphs.
+
+### Starting LangGraph Studio
+
+```bash
+# Make sure you're in the project directory
+cd langgraph_multi_agent
+
+# Set your OpenAI API key
+export OPENAI_API_KEY="your-key-here"
+
+# Start LangGraph Studio
+langgraph dev
+```
+
+The studio will start on `http://localhost:8123`
+
+### The Multi-Agent System
+
+The `langgraph.json` configuration exposes a unified **multi_agent_system** graph that shows all three agents working together:
+
+- **supervisor** - Routes queries to the appropriate specialized agent
+- **business_agent** - Handles business processes, policies, and KB queries
+- **database_agent** - Handles structured data and SQL queries
+
+This unified view lets you see the complete architecture and watch routing decisions in real-time!
+
+### Using the Studio
+
+**1. The Graph**
+- You'll see the **multi_agent_system** with all three agents
+
+**2. Visual Graph View**
+- See the agent's node structure
+- Understand the flow of execution
+- Inspect state at each step
+
+**3. Interactive Chat**
+- Type queries in the chat interface
+- Watch the agent process your request
+- See intermediate steps and reasoning
+
+**4. Thread Management**
+- Create new conversation threads
+- Switch between threads
+- Each thread maintains separate context
+
+**5. State Inspection**
+- View the full state at any point
+- See all messages in the conversation
+- Inspect checkpointer data
+
+**6. Time Travel Debugging**
+- Replay conversations step-by-step
+- Fork from any point in the conversation
+- Test different paths
+
+### Example Workflow
+
+```bash
+# 1. Start the studio
+langgraph dev
+
+# 2. Open http://localhost:8123 in your browser
+
+# 3. Select "multi_agent_system" (shows all agents)
+
+# 4. Try these queries to see routing in action:
+#    - "What are the top supply chain metrics?" → Routes to business_agent
+#    - "Show me sales data from last month" → Routes to database_agent
+#    - "Explain the second metric in detail" → Uses context, stays with business
+
+# 5. Watch the visual graph:
+#    - See the supervisor node route to the appropriate agent
+#    - Watch agents process and respond
+#    - Observe routing decisions in real-time
+
+# 6. Click on any node to see the state at that point
+
+# 7. Use "New Thread" to start a fresh conversation
+```
+
+### Configuration
+
+The `langgraph.json` file configures LangGraph Studio:
+
+```json
+{
+  "dependencies": ["."],
+  "graphs": {
+    "multi_agent_system": "./graphs/multi_agent_system.py:graph"
+  },
+  "env": ".env"
+}
+```
+
+- **dependencies**: Python packages to install
+- **graphs**: Graph entry points (file:variable format)
+- **env**: Environment file for API keys
+
+**Important Note on Checkpointers**:
+- ✅ **LangGraph Studio**: Graphs compile WITHOUT checkpointer (Studio provides persistence)
+- ✅ **FastAPI/Code**: Graphs compile WITH checkpointer (you manage persistence)
+
+The `graphs/` folder exports graphs without checkpointers for Studio use. For programmatic use (like `api/server.py`), compile with your chosen checkpointer.
+
+### Troubleshooting
+
+**Port already in use:**
+```bash
+langgraph dev --port 8124
+```
+
+**Can't find graphs:**
+- Ensure you're in the project root directory
+- Check that all graph files exist in `graphs/` folder
+- Verify imports work: `python -c "from graphs.business_graph import graph"`
+
+**API key errors:**
+- Make sure OPENAI_API_KEY is set: `echo $OPENAI_API_KEY`
+- Or create a `.env` file with `OPENAI_API_KEY=your-key`
+
 ## 🌐 API Usage
 
 ### Start the Server
@@ -220,7 +376,39 @@ uvicorn api.server:app --host 0.0.0.0 --port 8000
 
 API docs available at: http://localhost:8000/docs
 
-### Query an Agent
+### Two Routing Modes
+
+The API server supports both automatic and manual routing:
+
+#### 1. Automatic Routing (⭐ Recommended)
+
+The supervisor analyzes the query and routes automatically (same as LangGraph Studio):
+
+```bash
+curl -X POST http://localhost:8000/query/auto \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "What are supply chain best practices?"
+  }'
+```
+
+Response:
+```json
+{
+  "response": "Supply chain best practices include...",
+  "thread_id": "550e8400-e29b-41d4-a716-446655440000",
+  "agent_type": "business_agent"
+}
+```
+
+**Benefits:**
+- ✅ Intelligent routing based on query content
+- ✅ Same behavior as LangGraph Studio
+- ✅ No need to specify agent type
+
+#### 2. Manual Routing
+
+Client specifies which agent to use:
 
 ```bash
 curl -X POST http://localhost:8000/query \
@@ -231,14 +419,10 @@ curl -X POST http://localhost:8000/query \
   }'
 ```
 
-Response:
-```json
-{
-  "response": "Supply chain best practices include...",
-  "thread_id": "550e8400-e29b-41d4-a716-446655440000",
-  "agent_type": "business"
-}
-```
+**Use cases:**
+- Direct control over routing
+- Testing specific agents
+- UI with explicit agent selection
 
 ### Continue Conversation
 

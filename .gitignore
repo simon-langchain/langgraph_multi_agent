@@ -53,3 +53,7 @@ Thumbs.db
 frame_*.png
 detail_frame_*.png
 VIDEO_ANALYSIS.md
+STRUCTURE_VERIFICATION.md
+
+# LangGraph
+.langgraph_api/
