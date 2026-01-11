@@ -286,7 +286,10 @@ curl -X POST http://localhost:8000/query \
 
 **Full Error Message:**
 ```
-ValueError: LangGraph already has inbuilt Memory saver, it will be ignored
+ValueError: Heads up! Your graph '{name}' from '{path}' includes a custom 
+checkpointer (type <class '...'). With LangGraph API, persistence is handled 
+automatically by the platform, so providing a custom checkpointer here isn't 
+necessary and will be ignored when deployed.
 ```
 
 **What this means:**
