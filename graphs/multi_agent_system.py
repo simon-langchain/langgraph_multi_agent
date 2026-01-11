@@ -4,6 +4,20 @@ Multi-Agent System Graph for LangGraph Studio.
 This graph composes the existing modular agents (business, database, supervisor)
 into a unified system for visualization in LangGraph Studio.
 
+⚠️ CRITICAL - CHECKPOINTER USAGE:
+This file is loaded by `langgraph dev` (LangGraph Studio).
+DO NOT pass a checkpointer to compile() - Studio provides its own persistence!
+
+✅ CORRECT (for Studio):
+    graph = workflow.compile()  # No checkpointer
+
+❌ WRONG (causes errors):
+    checkpointer = MemorySaver()
+    graph = workflow.compile(checkpointer=checkpointer)  # Conflicts with Studio!
+
+For production deployment (FastAPI/direct Python), create a separate file that
+DOES pass a checkpointer. See main.py or api/server.py for examples.
+
 IMPORTANT: This file imports and reuses the agent implementations from agents/
 instead of duplicating their code, maintaining the modular structure.
 """
@@ -69,8 +83,15 @@ parent_workflow.add_conditional_edges(
 parent_workflow.add_edge("business_agent", END)
 parent_workflow.add_edge("database_agent", END)
 
-# Compile the parent graph (Studio provides persistence)
-graph = parent_workflow.compile()
+# Compile the parent graph
+# ⚠️ NO CHECKPOINTER - LangGraph Studio provides its own persistence
+# If you add a checkpointer here, you'll get errors when using `langgraph dev`
+graph = parent_workflow.compile()  # ✅ Correct for Studio
+
+# ❌ DON'T DO THIS (causes conflict with Studio):
+# from langgraph.checkpoint.memory import MemorySaver
+# checkpointer = MemorySaver()
+# graph = parent_workflow.compile(checkpointer=checkpointer)
 
 # Export for LangGraph Studio
 __all__ = ["graph"]

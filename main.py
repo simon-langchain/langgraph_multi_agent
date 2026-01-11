@@ -1,10 +1,17 @@
 """
-Main entry point demonstrating correct checkpointer usage.
+Main entry point demonstrating correct checkpointer usage for DIRECT PYTHON EXECUTION.
+
+⚠️ IMPORTANT - DEPLOYMENT CONTEXT:
+This file is for running agents directly with Python (not langgraph dev/Studio).
+When running directly, you MUST pass a checkpointer to compile().
+
+✅ This file: Direct Python execution → USE checkpointer
+❌ graphs/*.py: LangGraph Studio → NO checkpointer
 
 KEY POINTS:
 1. Thread ID is passed in config during invocation, NOT in state
-2. For InMemorySaver: You can omit checkpointer param (built-in) OR pass explicitly
-3. For MySQL: You MUST pass checkpointer to compile()
+2. For direct Python: You MUST pass checkpointer (MemorySaver or MySQL)
+3. For LangGraph Studio: See graphs/multi_agent_system.py (no checkpointer)
 """
 import uuid
 from langchain_core.messages import HumanMessage
@@ -23,22 +30,21 @@ def run_agent_with_memory(use_mysql: bool = False):
     # Create the workflow
     workflow = create_business_agent_graph()
 
-    # CORRECT WAY TO COMPILE WITH CHECKPOINTER
+    # ✅ CORRECT FOR DIRECT PYTHON EXECUTION - PASS CHECKPOINTER
+    # This is different from graphs/multi_agent_system.py which is for Studio
     if use_mysql:
         # For MySQL: MUST pass checkpointer
         print("Using MySQL Checkpointer")
         checkpointer = get_mysql_saver("mysql://user:pass@localhost:3306/langgraph")
         graph = workflow.compile(checkpointer=checkpointer)
     else:
-        # For InMemory: Two options
-
-        # Option 1: Don't pass anything (uses built-in)
-        # graph = workflow.compile()
-
-        # Option 2: Pass explicitly (recommended for shared memory)
+        # For InMemory: Pass checkpointer for direct Python execution
         print("Using InMemory Checkpointer")
         checkpointer = get_memory_saver()
         graph = workflow.compile(checkpointer=checkpointer)
+
+        # Note: For LangGraph Studio, you would NOT pass checkpointer
+        # See graphs/multi_agent_system.py for Studio usage
 
     # Create a thread ID for this conversation
     # IMPORTANT: Thread ID goes in config, NOT in state

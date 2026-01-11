@@ -2,18 +2,51 @@
 
 This project demonstrates the **correct way** to build a LangGraph multi-agent system with conversational memory, addressing common issues with checkpointer configuration.
 
+## ⚠️ CRITICAL: Checkpointer Usage Context
+
+**The #1 mistake causing memory issues:**
+
+```python
+# ❌ WRONG - Using checkpointer with LangGraph Studio/Dev
+# In graphs/multi_agent_system.py:
+checkpointer = MemorySaver()
+graph = workflow.compile(checkpointer=checkpointer)  # DON'T DO THIS!
+```
+
+**The correct approach depends on HOW you're running:**
+
+| Context | Checkpointer? | Why? |
+|---------|--------------|------|
+| **LangGraph Studio** (`langgraph dev`) | ❌ **NO** | Studio has built-in persistence |
+| **Production** (FastAPI/Python) | ✅ **YES** | You manage persistence |
+
+```python
+# ✅ CORRECT - For LangGraph Studio
+# In graphs/multi_agent_system.py:
+graph = workflow.compile()  # No checkpointer - Studio handles it
+
+# ✅ CORRECT - For Production
+# In main.py or api/server.py:
+checkpointer = MemorySaver()  # or PyMySQLSaver for production
+graph = workflow.compile(checkpointer=checkpointer)
+```
+
+**See Section "Checkpointer Configuration" below for complete details.**
+
+---
+
 ## 🎯 Key Issues Solved
 
 Based on real-world implementation challenges:
 
-1. **✓ Error: "LangGraph already has inbuilt Memory saver, it will be ignored"**
-   - Solution: Don't pass `MemorySaver` to `compile()` (it's built-in) OR pass explicitly for shared memory
+1. **✓ Error: "LangGraph already has inbuilt Memory saver" when using Studio**
+   - Solution: Don't pass checkpointer when using `langgraph dev`
 
 2. **✓ Context not retained between follow-up questions**
    - Solution: Use `add_messages` reducer in state and pass `thread_id` in config (not state)
 
-3. **✓ Confusion about MySQL vs InMemory checkpointer usage**
-   - Solution: Clear examples for both, with proper configuration
+3. **✓ Confusion about when to use checkpointer**
+   - Solution: Studio = no checkpointer, Production = yes checkpointer
 
 4. **✓ Uncertain about thread_id placement**
    - Solution: thread_id goes in `config`, not in `state`
@@ -145,46 +178,134 @@ The `add_messages` reducer:
 
 ### 2. Checkpointer Configuration
 
-#### Option A: InMemorySaver (Development/Testing)
+**⚠️ CRITICAL:** Checkpointer usage depends on your deployment context.
 
-**Method 1: Don't pass anything (uses built-in)**
+#### Context 1: LangGraph Studio (`langgraph dev`)
+
+**Use Case:** Local development with Studio UI
+
+**✅ CORRECT - No Checkpointer:**
 ```python
+# In graphs/multi_agent_system.py (loaded by Studio)
+
 workflow = create_business_agent_graph()
-graph = workflow.compile()  # ✓ Uses built-in MemorySaver
+
+# DO NOT pass checkpointer - Studio provides persistence
+graph = workflow.compile()
+
+# Export for Studio
+__all__ = ["graph"]
 ```
 
-**Method 2: Pass explicitly (for shared memory)**
+**❌ WRONG - With Checkpointer:**
+```python
+# DON'T DO THIS in files loaded by langgraph dev!
+from langgraph.checkpoint.memory import MemorySaver
+
+checkpointer = MemorySaver()
+graph = workflow.compile(checkpointer=checkpointer)  # ❌ Conflicts with Studio!
+```
+
+**Why:** LangGraph Studio has its own built-in persistence layer. Passing a checkpointer creates a conflict and causes errors like "LangGraph already has inbuilt Memory saver".
+
+---
+
+#### Context 2: Direct Python Execution (Development/Testing)
+
+**Use Case:** Running with `python main.py` or in notebooks
+
+**✅ CORRECT - With MemorySaver:**
+```python
+# In main.py or your script
+
+from langgraph.checkpoint.memory import MemorySaver
+
+workflow = create_business_agent_graph()
+
+# DO pass checkpointer for programmatic use
+checkpointer = MemorySaver()
+graph = workflow.compile(checkpointer=checkpointer)
+```
+
+**Why:** When running directly (not via Studio), you need to explicitly provide a checkpointer for persistence.
+
+---
+
+#### Context 3: Production Deployment (FastAPI/Server)
+
+**Use Case:** Production deployment with persistent storage
+
+**✅ CORRECT - With PyMySQLSaver:**
+```python
+# In api/server.py or production main.py
+
+from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
+
+workflow = create_business_agent_graph()
+
+# MUST pass checkpointer for production persistence
+checkpointer = PyMySQLSaver.from_conn_string(
+    "mysql://user:password@host:port/database"
+)
+graph = workflow.compile(checkpointer=checkpointer)
+```
+
+**✅ CORRECT - With MemorySaver (for testing production setup):**
 ```python
 from langgraph.checkpoint.memory import MemorySaver
 
 checkpointer = MemorySaver()
-graph = workflow.compile(checkpointer=checkpointer)  # ✓ Explicit shared memory
-```
-
-**⚠️ Warning:** If you pass `MemorySaver` unnecessarily, you'll see:
-```
-"LangGraph already has inbuilt Memory saver, it will be ignored"
-```
-
-#### Option B: MySQLSaver (Production)
-
-**✓ CORRECT:**
-```python
-from langgraph.checkpoint.mysql import MySQLSaver
-
-# Create checkpointer
-checkpointer = MySQLSaver.from_conn_string(
-    "mysql://user:password@host:port/database"
-)
-
-# MUST pass to compile()
 graph = workflow.compile(checkpointer=checkpointer)
 ```
 
-**❌ WRONG:**
+**Why:** Production needs explicit persistence that survives server restarts (MySQL) or at minimum provides in-memory persistence.
+
+---
+
+#### Summary Table
+
+| Deployment Context | File Location | Checkpointer? | Reason |
+|-------------------|---------------|---------------|---------|
+| **LangGraph Studio** | `graphs/*.py` | ❌ NO | Studio provides it |
+| **Direct Python** | `main.py` | ✅ YES (MemorySaver) | You manage persistence |
+| **Production API** | `api/server.py` | ✅ YES (MySQL/Memory) | You manage persistence |
+
+---
+
+#### Common Mistakes
+
+**❌ Mistake 1: Using checkpointer with Studio**
 ```python
-checkpointer = MySQLSaver.from_conn_string(conn_str)
-graph = workflow.compile()  # Missing checkpointer! Won't use MySQL
+# graphs/multi_agent_system.py
+checkpointer = MemorySaver()
+graph = workflow.compile(checkpointer=checkpointer)  # ❌ Studio already has one!
+# Run: langgraph dev
+# Result: Error/warning about built-in memory saver
+```
+
+**❌ Mistake 2: Not using checkpointer in production**
+```python
+# api/server.py
+graph = workflow.compile()  # ❌ No persistence in production!
+# Result: Memory lost on server restart, no conversation history
+```
+
+**✅ Solution: Separate compilation for different contexts**
+```python
+# graphs/multi_agent_system.py (for Studio)
+def create_graph():
+    workflow = create_business_agent_graph()
+    return workflow  # Return uncompiled
+
+graph = create_graph().compile()  # No checkpointer
+
+# api/server.py (for Production)
+from graphs.multi_agent_system import create_graph
+from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
+
+workflow = create_graph()
+checkpointer = PyMySQLSaver.from_conn_string(...)
+graph = workflow.compile(checkpointer=checkpointer)  # With checkpointer
 ```
 
 ### 3. Thread ID Placement

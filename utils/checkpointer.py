@@ -3,18 +3,18 @@ Checkpointer configuration for conversational memory.
 
 IMPORTANT NOTES:
 1. For InMemorySaver: DO NOT pass checkpointer to compile() - it's built-in
-2. For MySQLSaver: You MUST pass checkpointer to compile()
+2. For PyMySQLSaver: You MUST pass checkpointer to compile()
 3. Thread ID should be passed in config during invocation, NOT in the state
 """
 from langgraph.checkpoint.memory import MemorySaver
 
 # MySQL checkpointer is optional - only import if installed
 try:
-    from langgraph.checkpoint.mysql import MySQLSaver
+    from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
     MYSQL_AVAILABLE = True
 except ImportError:
     MYSQL_AVAILABLE = False
-    MySQLSaver = None
+    PyMySQLSaver = None
 
 
 def get_memory_saver():
@@ -57,7 +57,7 @@ def get_mysql_saver(connection_string: str = None):
         # Default for testing
         connection_string = "mysql://root:password@localhost:3306/langgraph_db"
 
-    return MySQLSaver.from_conn_string(connection_string)
+    return PyMySQLSaver.from_conn_string(connection_string)
 
 
 # Configuration examples
@@ -76,10 +76,10 @@ CHECKPOINTER_CONFIG = {
     "mysql": {
         "description": "MySQL checkpointer for production",
         "usage": """
-        from langgraph.checkpoint.mysql import MySQLSaver
+        from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
 
         # Create MySQL checkpointer
-        checkpointer = MySQLSaver.from_conn_string(
+        checkpointer = PyMySQLSaver.from_conn_string(
             "mysql://user:password@host:port/database"
         )
 

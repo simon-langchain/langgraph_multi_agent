@@ -10,7 +10,7 @@ CRITICAL POINTS FROM THE VIDEO DISCUSSION:
 """
 import uuid
 from langchain_core.messages import HumanMessage
-from langgraph.checkpoint.mysql import MySQLSaver
+from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
 from agents.business_agent import create_business_agent_graph
 
 
@@ -22,8 +22,8 @@ def setup_mysql_checkpointer():
     # Format: mysql://username:password@host:port/database
     connection_string = "mysql://root:password@localhost:3306/langgraph_db"
 
-    # Step 2: Create MySQLSaver from connection string
-    checkpointer = MySQLSaver.from_conn_string(connection_string)
+    # Step 2: Create PyMySQLSaver from connection string
+    checkpointer = PyMySQLSaver.from_conn_string(connection_string)
 
     # Step 3: Create workflow
     workflow = create_business_agent_graph()
@@ -91,13 +91,15 @@ def common_mistakes():
     print("\n❌ MISTAKE 1: Not passing checkpointer for MySQL")
     print("""
     # This won't use MySQL - it will use built-in MemorySaver
-    checkpointer = MySQLSaver.from_conn_string(conn_str)
+    from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
+    checkpointer = PyMySQLSaver.from_conn_string(conn_str)
     graph = workflow.compile()  # Missing checkpointer parameter!
     """)
 
     print("\n✓ FIX 1: Pass checkpointer to compile()")
     print("""
-    checkpointer = MySQLSaver.from_conn_string(conn_str)
+    from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
+    checkpointer = PyMySQLSaver.from_conn_string(conn_str)
     graph = workflow.compile(checkpointer=checkpointer)  # Correct!
     """)
 
