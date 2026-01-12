@@ -1,44 +1,47 @@
-# Checkpointer Usage Guide: Studio vs Production
+# Checkpointer Usage Guide: When to Pass a Checkpointer
 
 ## Overview
 
-The **#1 cause of memory issues** in LangGraph multi-agent systems is incorrect checkpointer usage based on deployment context.
+The **#1 cause of memory issues** in LangGraph is passing custom checkpointers when the deployment platform already manages persistence automatically.
 
-This guide clarifies when to use checkpointers and when not to.
+**Key Rule**: Only pass a custom checkpointer when running graphs in **your own custom application code**.
 
 ---
 
 ## Quick Reference
 
-| Context | Checkpointer? | Example File |
-|---------|--------------|--------------|
-| **LangGraph Studio** (`langgraph dev`) | ❌ NO | `graphs/multi_agent_system.py` |
-| **Direct Python** (`python main.py`) | ✅ YES | `main.py` |
-| **Production API** (FastAPI) | ✅ YES | `api/server.py` |
+| Deployment Method | Checkpointer? | Why |
+|------------------|--------------|-----|
+| **LangSmith Deployments** (Studio, Cloud, Agent Server) | ❌ **NO** | Platform handles it automatically |
+| **Custom Application** (your own Python script/FastAPI) | ✅ **YES** | You manage persistence |
 
 ---
 
-## Context 1: LangGraph Studio
+## When NOT to Pass a Checkpointer
 
-**Command**: `langgraph dev`
+### ❌ LangSmith Deployments (Studio, Cloud, Agent Server)
 
-**Where**: `graphs/multi_agent_system.py`
+If you're using any LangSmith deployment platform, **do not pass a custom checkpointer**:
 
-**Checkpointer**: ❌ **NO** - Studio provides built-in persistence
+- `langgraph dev` (LangGraph Studio)
+- LangSmith Deployments (formerly LangGraph Cloud)
+- Agent Server
 
-### ✅ CORRECT
+**These platforms handle checkpointing automatically behind the scenes.**
+
+### ✅ CORRECT - Platform Deployments
 ```python
 # graphs/multi_agent_system.py
 
 workflow = create_business_agent_graph()
 
-# DO NOT pass checkpointer
-graph = workflow.compile()  # Studio handles persistence
+# DO NOT pass checkpointer - platform handles it
+graph = workflow.compile()
 
 __all__ = ["graph"]
 ```
 
-### ❌ WRONG
+### ❌ WRONG - Platform Deployments
 ```python
 # graphs/multi_agent_system.py
 
@@ -47,39 +50,60 @@ from langgraph.checkpoint.memory import MemorySaver
 checkpointer = MemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)  # ❌ Conflicts!
 
-# Error: "LangGraph already has inbuilt Memory saver"
+# Error: "LangGraph already has inbuilt Memory saver, it will be ignored"
 ```
 
-### Why?
+**Why?**
 
-LangGraph Studio (`langgraph dev`) has its own built-in persistence layer. When you pass a checkpointer, it creates a conflict because the system tries to use two persistence mechanisms simultaneously.
+LangGraph Platform provides managed persistence. When you pass a custom checkpointer, you're telling the platform to use two different persistence mechanisms, which causes a conflict.
+
+**Reference**: [LangGraph Documentation](https://docs.langchain.com/oss/python/langgraph/persistence) - "Agent Server handles checkpointing automatically"
 
 ---
 
-## Context 2: Direct Python Execution
+## When TO Pass a Checkpointer
 
-**Command**: `python main.py`
+### ✅ Custom Applications (Self-Hosted)
 
-**Where**: `main.py` or your script
+Only pass a custom checkpointer when you're building **your own application** that embeds LangGraph:
 
-**Checkpointer**: ✅ **YES** - You manage persistence
+- Direct Python scripts (`python main.py`)
+- Your own FastAPI/Flask server
+- Self-hosted custom applications
 
-### ✅ CORRECT
+In these cases, **you are responsible for persistence**.
+
+### ✅ CORRECT - Custom Python Script
 ```python
-# main.py
+# main.py - your custom script
 
 from langgraph.checkpoint.memory import MemorySaver
 
 workflow = create_business_agent_graph()
 
-# DO pass checkpointer
+# DO pass checkpointer - you manage persistence
 checkpointer = MemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)
 ```
 
-### ❌ WRONG
+### ✅ CORRECT - Custom Self-Hosted Server
 ```python
-# main.py
+# server.py - your custom FastAPI server
+
+from langgraph.checkpoint.memory import MemorySaver
+# or for production:
+# from langgraph.checkpoint.postgres import PostgresSaver
+
+workflow = create_business_agent_graph()
+
+# DO pass checkpointer - you manage persistence
+checkpointer = MemorySaver()  # or PostgresSaver for production
+graph = workflow.compile(checkpointer=checkpointer)
+```
+
+### ❌ WRONG - Custom Applications
+```python
+# main.py or server.py
 
 workflow = create_business_agent_graph()
 
@@ -87,128 +111,81 @@ workflow = create_business_agent_graph()
 graph = workflow.compile()  # ❌ Conversations not saved
 ```
 
-### Why?
+**Why?**
 
-When running directly with Python (not via Studio), there's no built-in persistence. You must explicitly provide a checkpointer for conversational memory to work.
-
----
-
-## Context 3: Production Deployment
-
-**Command**: `uvicorn api.server:app` or production server
-
-**Where**: `api/server.py`
-
-**Checkpointer**: ✅ **YES** - Use MySQL for persistence
-
----
-
-> **Note**: `langgraph-checkpoint-mysql` is a community-maintained package
-> (https://github.com/tjni/langgraph-checkpoint-mysql), not an official
-> LangChain library. For officially supported production persistence,
-> consider using `PostgresSaver` from `langgraph-checkpoint-postgres`.
-
----
-
-### ✅ CORRECT
-```python
-# api/server.py
-
-from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
-
-workflow = create_business_agent_graph()
-
-# DO pass checkpointer for production
-checkpointer = PyMySQLSaver.from_conn_string(
-    "mysql://user:password@host:port/database"
-)
-graph = workflow.compile(checkpointer=checkpointer)
-```
-
-### ✅ ALSO CORRECT (for testing production setup)
-```python
-# api/server.py
-
-from langgraph.checkpoint.memory import MemorySaver
-
-# Use MemorySaver for testing production API
-checkpointer = MemorySaver()
-graph = workflow.compile(checkpointer=checkpointer)
-```
-
-### Why?
-
-Production needs persistent storage that survives server restarts. MySQL provides this. PyMySQLSaver works for testing the production setup but won't persist across restarts.
+Custom applications don't have built-in persistence infrastructure. You must explicitly provide a checkpointer for conversational memory to work.
 
 ---
 
 ## Common Mistakes
 
-### Mistake 1: Using Checkpointer with Studio
+### Mistake 1: Passing Checkpointer to Platform Deployments
 
-**Symptom**: Error message like "LangGraph already has inbuilt Memory saver"
+**Symptom**: Error message "LangGraph already has inbuilt Memory saver, it will be ignored"
 
-**Cause**:
+**Cause**: Passing a custom checkpointer when using LangGraph Platform (Studio, Cloud, Agent Server)
+
 ```python
 # graphs/multi_agent_system.py (loaded by langgraph dev)
 checkpointer = MemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)  # ❌
 ```
 
-**Fix**:
+**Fix**: Remove the checkpointer - platform handles it automatically
 ```python
 # graphs/multi_agent_system.py
-graph = workflow.compile()  # ✅ No checkpointer for Studio
+graph = workflow.compile()  # ✅ Platform handles persistence
 ```
 
 ---
 
-### Mistake 2: Not Using Checkpointer in Production
+### Mistake 2: Not Using Checkpointer in Custom Applications
 
-**Symptom**: Conversations lost on server restart, no memory
+**Symptom**: Conversations lost, no memory persistence
 
-**Cause**:
+**Cause**: Not passing a checkpointer when building your own custom application
+
 ```python
-# api/server.py
+# main.py or your custom server.py
 graph = workflow.compile()  # ❌ No persistence
 ```
 
-**Fix**:
+**Fix**: Pass a checkpointer explicitly
 ```python
-# api/server.py
-from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
-checkpointer = PyMySQLSaver.from_conn_string(...)
+# main.py or your custom server.py
+from langgraph.checkpoint.memory import MemorySaver
+checkpointer = MemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)  # ✅
 ```
 
 ---
 
-### Mistake 3: Using Same Code for Studio and Production
+### Mistake 3: Using Same Graph Definition for Both
 
-**Problem**: One codebase, different deployment contexts
+**Problem**: One graph file needs to work for both platform deployments and custom applications
 
-**Solution**: Separate graph definition from compilation
+**Solution**: Always compile without checkpointer in your graph definition. Add checkpointer separately in custom applications.
 
 ```python
-# graphs/multi_agent_system.py (for Studio)
+# graphs/multi_agent_system.py (shareable)
 def create_multi_agent_graph():
     """Return uncompiled workflow"""
     workflow = create_business_agent_graph()
     return workflow
 
-# Export compiled version (no checkpointer for Studio)
+# For platform deployment - compile without checkpointer
 graph = create_multi_agent_graph().compile()
 __all__ = ["graph"]
 ```
 
 ```python
-# api/server.py (for Production)
+# main.py (custom application)
 from graphs.multi_agent_system import create_multi_agent_graph
-from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
+from langgraph.checkpoint.memory import MemorySaver
 
-# Compile with checkpointer for production
+# Compile with checkpointer for custom application
 workflow = create_multi_agent_graph()
-checkpointer = PyMySQLSaver.from_conn_string(...)
+checkpointer = MemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)
 ```
 
@@ -219,32 +196,25 @@ graph = workflow.compile(checkpointer=checkpointer)
 ```
 your_project/
 ├── graphs/
-│   └── multi_agent_system.py   # ❌ NO checkpointer (for Studio)
-├── main.py                      # ✅ YES checkpointer (for direct Python)
-└── api/
-    └── server.py                # ✅ YES checkpointer (for production)
+│   └── multi_agent_system.py   # Graph definition (no checkpointer)
+└── main.py                      # Custom app (add checkpointer here)
 ```
 
 ### graphs/multi_agent_system.py
-- **Purpose**: LangGraph Studio entry point
+- **Purpose**: Graph definition for any deployment
 - **Checkpointer**: ❌ NO
-- **Why**: Studio provides persistence
+- **Why**: Platform handles it; custom apps add it separately
 
-### main.py
-- **Purpose**: Direct Python execution
-- **Checkpointer**: ✅ YES (MemorySaver)
+### main.py (if building custom application)
+- **Purpose**: Your custom Python script/server
+- **Checkpointer**: ✅ YES (MemorySaver or PostgresSaver)
 - **Why**: You manage persistence
-
-### api/server.py
-- **Purpose**: Production API
-- **Checkpointer**: ✅ YES (PyMySQLSaver)
-- **Why**: Production needs persistent storage
 
 ---
 
 ## Testing Your Setup
 
-### Test Studio (No Checkpointer)
+### Test Platform Deployment (Studio)
 ```bash
 # Should work without errors
 langgraph dev
@@ -252,30 +222,16 @@ langgraph dev
 # Open http://localhost:8123
 # Send message: "Hello"
 # Send follow-up: "What did I say?"
-# Should maintain context ✅
+# Should maintain context ✅ (Studio handles persistence automatically)
 ```
 
-### Test Direct Python (With Checkpointer)
+### Test Custom Application
 ```bash
-# Should work without errors
+# If you built your own script with checkpointer
 python main.py
 
-# Should see:
-# "Using InMemory Checkpointer"
-# Conversation with context maintained ✅
-```
-
-### Test Production API (With Checkpointer)
-```bash
-# Start server
-uvicorn api.server:app --reload
-
-# Test endpoint
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Hello", "agent_type": "business"}'
-
-# Should return response with thread_id ✅
+# Should see conversation with context maintained ✅
+# Checkpointer you passed handles persistence
 ```
 
 ---
@@ -327,23 +283,22 @@ graph = workflow.compile()  # No checkpointer - Studio handles it
 - Agent doesn't remember previous conversation
 - Each query is treated as a new conversation
 
-**Cause**: No checkpointer in direct Python/production execution
+**Cause**: No checkpointer in custom application, OR missing thread_id in config
 
 **Common scenarios:**
-1. Running `python main.py` without passing checkpointer
-2. FastAPI server not configured with checkpointer
-3. Forgot to pass `config` with `thread_id` during invocation
+1. Running your custom application without passing checkpointer
+2. Forgot to pass `config` with `thread_id` during invocation (applies to all deployments)
 
-**Fix 1**: Add checkpointer to `compile()` call
+**Fix 1** (if running custom application): Add checkpointer to `compile()` call
 ```python
-# If running directly with Python (not langgraph dev)
+# main.py - your custom application
 from langgraph.checkpoint.memory import MemorySaver
 
 checkpointer = MemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)
 ```
 
-**Fix 2**: Ensure you're passing thread_id in config
+**Fix 2** (applies to all deployments): Ensure you're passing thread_id in config
 ```python
 # Thread ID must be in config, not state
 config = {"configurable": {"thread_id": "conversation-123"}}
@@ -356,33 +311,35 @@ result = graph.invoke({"messages": [...]}, config=config)
 
 **Symptoms:**
 - Conversations work during a session
-- After restarting the server, all conversation history is lost
+- After restarting the server/application, all conversation history is lost
 - Thread IDs don't retrieve previous conversations
 
-**Cause**: Using MemorySaver in production (stores in RAM only)
+**Cause**: Using MemorySaver in custom application (stores in RAM only)
 
 **Why it happens:**
-MemorySaver stores checkpoints in memory, which is cleared when the process restarts. For production, you need persistent storage.
+MemorySaver stores checkpoints in memory, which is cleared when the process restarts. For production custom applications, you need persistent storage.
 
-**Fix**: Switch to PyMySQLSaver for persistent storage
+**Note**: This only applies to **custom applications**. If using LangGraph Platform (Studio, Cloud, Agent Server), the platform provides persistent storage automatically.
+
+**Fix** (for custom applications): Switch to PostgresSaver for persistent storage
 
 ```python
-# Replace MemorySaver with PyMySQLSaver
-from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
+# Replace MemorySaver with PostgresSaver
+from langgraph.checkpoint.postgres import PostgresSaver
 
-checkpointer = PyMySQLSaver.from_conn_string(
-    "mysql://user:password@host:port/database"
+checkpointer = PostgresSaver.from_conn_string(
+    "postgresql://user:password@host:port/database"
 )
 graph = workflow.compile(checkpointer=checkpointer)
 ```
 
-**Setup MySQL:**
+**Setup PostgreSQL:**
 ```bash
 # 1. Install package
-pip install langgraph-checkpoint-mysql pymysql
+pip install langgraph-checkpoint-postgres
 
 # 2. Create database
-mysql -u root -p
+psql -U postgres
 CREATE DATABASE langgraph_db;
 
 # 3. First run - call setup()
@@ -391,58 +348,50 @@ checkpointer.setup()  # Creates required tables
 
 ---
 
-### MySQL Connection Errors
+### Database Connection Errors (Custom Applications Only)
+
+**Note**: This section only applies if you're building a custom application with a persistent checkpointer (PostgresSaver, etc.). If using LangGraph Platform, the platform handles database connections automatically.
 
 **Symptoms:**
-- Certificate errors when connecting to MySQL
+- Certificate errors when connecting to database
 - "SSL connection error" or similar
-- MySQL worked in old code structure but not in new structure
+- Connection timeouts
 
 **Common causes:**
-1. **Incorrect import** (see above - must use `PyMySQLSaver` not `MySQLSaver`)
-2. **SSL/TLS certificate issues**
-3. **Connection string format incorrect**
-4. **Database not created or accessible**
+1. **SSL/TLS certificate issues**
+2. **Connection string format incorrect**
+3. **Database not created or accessible**
+4. **Firewall/network restrictions**
 
 **Fix for SSL/certificate errors:**
 ```python
 # Add SSL parameters to connection string if needed
 connection_string = (
-    "mysql://user:password@host:port/database"
-    "?ssl_ca=/path/to/ca.pem"
-    "&ssl_verify_cert=true"
+    "postgresql://user:password@host:port/database"
+    "?sslmode=require"
+    "&sslrootcert=/path/to/ca.pem"
 )
 ```
 
-**Or disable SSL verification (not recommended for production):**
+**Or disable SSL verification for testing (not recommended for production):**
 ```python
 connection_string = (
-    "mysql://user:password@host:port/database"
-    "?ssl_verify_cert=false"
+    "postgresql://user:password@host:port/database"
+    "?sslmode=disable"
 )
-```
-
-**Verify connection string format:**
-```python
-# Correct format
-mysql://username:password@hostname:port/database_name
-
-# Examples
-mysql://root:mypass@localhost:3306/langgraph_db
-mysql://user:pass@db.example.com:3306/production_db
 ```
 
 **Test connection independently:**
 ```python
-import pymysql
+import psycopg2
 try:
-    conn = pymysql.connect(
+    conn = psycopg2.connect(
         host='localhost',
-        user='root',
+        user='postgres',
         password='password',
         database='langgraph_db'
     )
-    print("✓ MySQL connection successful!")
+    print("✓ Database connection successful!")
     conn.close()
 except Exception as e:
     print(f"✗ Connection failed: {e}")
@@ -452,18 +401,18 @@ except Exception as e:
 
 ## Summary
 
-**Remember**:
-- 🎨 **Studio** = No checkpointer (Studio has built-in)
-- 🐍 **Python** = Yes checkpointer (you manage it)
-- 🚀 **Production** = Yes checkpointer (PyMySQLSaver for persistence)
+**The Key Rule:**
 
-**Different contexts = different checkpointer usage!**
+- **LangGraph Platform** (Studio, Cloud, Agent Server) = ❌ Don't pass checkpointer
+- **Custom Applications** (your own Python scripts/servers) = ✅ Pass checkpointer
+
+**Different deployment methods have different persistence requirements!**
 
 ---
 
 ## See Also
 
 - [README.md](README.md) - Full project documentation
-- [graphs/multi_agent_system.py](graphs/multi_agent_system.py) - Studio example
-- [main.py](main.py) - Direct Python example
-- [api/server.py](api/server.py) - Production example
+- [graphs/multi_agent_system.py](graphs/multi_agent_system.py) - Platform deployment example
+- [main.py](main.py) - Custom application example
+- [LangGraph Persistence Docs](https://docs.langchain.com/oss/python/langgraph/persistence) - Official documentation
