@@ -55,7 +55,7 @@ graph = workflow.compile(checkpointer=checkpointer)  # ❌ Conflicts!
 
 **Why?**
 
-LangGraph Platform provides managed persistence. When you pass a custom checkpointer, you're telling the platform to use two different persistence mechanisms, which causes a conflict.
+LangSmith Deployments provide managed persistence. When you pass a custom checkpointer, you're telling the platform to use two different persistence mechanisms, which causes a conflict.
 
 **Reference**: [LangGraph Documentation](https://docs.langchain.com/oss/python/langgraph/persistence) - "Agent Server handles checkpointing automatically"
 
@@ -123,7 +123,7 @@ Custom applications don't have built-in persistence infrastructure. You must exp
 
 **Symptom**: Error message "LangGraph already has inbuilt Memory saver, it will be ignored"
 
-**Cause**: Passing a custom checkpointer when using LangGraph Platform (Studio, Cloud, Agent Server)
+**Cause**: Passing a custom checkpointer when using LangSmith Deployments (Studio, Cloud, Agent Server)
 
 ```python
 # graphs/multi_agent_system.py (loaded by langgraph dev)
@@ -319,7 +319,7 @@ result = graph.invoke({"messages": [...]}, config=config)
 **Why it happens:**
 MemorySaver stores checkpoints in memory, which is cleared when the process restarts. For production custom applications, you need persistent storage.
 
-**Note**: This only applies to **custom applications**. If using LangGraph Platform (Studio, Cloud, Agent Server), the platform provides persistent storage automatically.
+**Note**: This only applies to **custom applications**. If using LangSmith Deployments (Studio, Cloud, Agent Server), the platform provides persistent storage automatically.
 
 **Fix** (for custom applications): Switch to PostgresSaver for persistent storage
 
@@ -350,7 +350,7 @@ checkpointer.setup()  # Creates required tables
 
 ### Database Connection Errors (Custom Applications Only)
 
-**Note**: This section only applies if you're building a custom application with a persistent checkpointer (PostgresSaver, etc.). If using LangGraph Platform, the platform handles database connections automatically.
+**Note**: This section only applies if you're building a custom application with a persistent checkpointer (PostgresSaver, etc.). If using LangSmith Deployments, the platform handles database connections automatically.
 
 **Symptoms:**
 - Certificate errors when connecting to database
@@ -403,7 +403,7 @@ except Exception as e:
 
 **The Key Rule:**
 
-- **LangGraph Platform** (Studio, Cloud, Agent Server) = ❌ Don't pass checkpointer
+- **LangSmith Deployments** (Studio, Cloud, Agent Server) = ❌ Don't pass checkpointer
 - **Custom Applications** (your own Python scripts/servers) = ✅ Pass checkpointer
 
 **Different deployment methods have different persistence requirements!**
